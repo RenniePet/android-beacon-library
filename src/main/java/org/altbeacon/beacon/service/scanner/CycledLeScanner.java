@@ -159,7 +159,7 @@ public abstract class CycledLeScanner {
     protected void scanLeDevice(final Boolean enable) {
         mScanCyclerStarted = true;
         if (getBluetoothAdapter() == null) {
-            LogManager.e(TAG, "No bluetooth adapter.  beaconService cannot scan.");
+            LogManager.e(TAG, "No Bluetooth adapter.  beaconService cannot scan.");
         }
         if (enable) {
             if (deferScanIfNeeded()) {
@@ -197,7 +197,7 @@ public abstract class CycledLeScanner {
                         }
                     }
                 } catch (Exception e) {
-                    LogManager.e(e, TAG, "Exception starting bluetooth scan.  Perhaps bluetooth is disabled or unavailable?");
+                    LogManager.e(e, TAG, "Exception starting Bluetooth scan.  Perhaps Bluetooth is disabled or unavailable?");
                 }
             } else {
                 LogManager.d(TAG, "We are already scanning");
@@ -268,7 +268,6 @@ public abstract class CycledLeScanner {
         }
     }
 
-
     protected BluetoothAdapter getBluetoothAdapter() {
         if (mBluetoothAdapter == null) {
             // Initializes Bluetooth adapter.
@@ -296,26 +295,37 @@ public abstract class CycledLeScanner {
         if (milliseconds < mScanPeriod) {
             milliseconds = mScanPeriod;
         }
+
         AlarmManager alarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
-        Intent intent = new Intent();
-        intent.setClassName(mContext, StartupBroadcastReceiver.class.getName());
-        intent.putExtra("wakeup", true);
-        cancelWakeUpAlarm();
-        mWakeUpOperation = PendingIntent.getBroadcast(mContext, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
-        alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, System.currentTimeMillis() + milliseconds, mWakeUpOperation);
-        LogManager.d(TAG, "Set a wakeup alarm to go off in %s ms: %s", milliseconds, mWakeUpOperation);
+        alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + milliseconds, getWakeUpOperation());
+        LogManager.d(TAG, "Set a wakeup alarm to go off in %s ms: %s", milliseconds, getWakeUpOperation());
+    }
+
+    protected PendingIntent getWakeUpOperation() {
+        if (mWakeUpOperation == null) {
+            Intent wakeupIntent = new Intent();
+            //intent.setFlags(Intent.FLAG_UPDATE_CURRENT);
+            wakeupIntent.setClassName(mContext, StartupBroadcastReceiver.class.getName());
+            wakeupIntent.putExtra("wakeup", true);
+            mWakeUpOperation = PendingIntent.getBroadcast(mContext, 0, wakeupIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        }
+        return mWakeUpOperation;
     }
 
     protected void cancelWakeUpAlarm() {
         LogManager.d(TAG, "cancel wakeup alarm: %s", mWakeUpOperation);
-        if (mWakeUpOperation != null) {
-            AlarmManager alarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
-            alarmManager.cancel(mWakeUpOperation);
-        }
+        // We actually don't cancel the wakup alarm... we just reschedule for a long time in the
+        // future.  This is to get around a limit on 500 alarms you can start per app on Samsung
+        // devices.
+        long milliseconds = Long.MAX_VALUE; // 2.9 million years from now
+        AlarmManager alarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
+        alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + milliseconds, getWakeUpOperation());
+        LogManager.d(TAG, "Set a wakeup alarm to go off in %s ms: %s", milliseconds, getWakeUpOperation());
+
     }
 
     private long getNextScanStartTime() {
-        // Because many apps may use this library on the same device, we want to try to synchonize
+        // Because many apps may use this library on the same device, we want to try to synchronize
         // scanning as much as possible in order to save battery.  Therefore, we will set the scan
         // intervals to be on a predictable interval using a modulus of the system time.  This may
         // cause scans to start a little earlier than otherwise, but it should be acceptable.
